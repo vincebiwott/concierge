@@ -11,6 +11,11 @@ const catBadge={'guest-luggage':'bg','guest-valuables':'bb','hotel-equipment':'b
 const priMap={urgent:'br2',medium:'bo',low:'bg'};
 const priOrder={urgent:0,important:1,medium:1,normal:2,low:2};
 
+// ── GUEST RELATIONS ACCESS ──
+var GR_PAGES=['dashboard','newspapers','timetable','lostfound','report','analytics','complaints'];
+function isGR(){return CR==='gr';}
+function grBlocked(page){return isGR()&&GR_PAGES.indexOf(page)===-1;}
+
 // ── NEWSPAPER CONFIG ──
 var NP_RECIPIENTS=[
   {id:1,name:'PRESIDENT',papers:['Nation','Standard','Business Daily','Star']},
@@ -99,14 +104,23 @@ function initApp(){
   av.textContent=initials;
   if(CR==='admin')av.classList.add('is-admin');
   document.getElementById('uname').textContent=CU.full_name;
-  document.getElementById('urole').textContent=CR.toUpperCase();
+  document.getElementById('urole').textContent=isGR()?'GUEST RELATIONS':CR.toUpperCase();
   document.getElementById('wd').value=new Date().toISOString().split('T')[0];
   document.getElementById('report-date').value=new Date().toISOString().split('T')[0];
   if(CR==='admin'||CR==='hod'){show('anlbl');show('nav-users');}
+if(isGR()){
+  var grHide=['nav-luggage','nav-wakeup','nav-store','nav-handover'];
+  grHide.forEach(function(id){var el=document.getElementById(id);if(el)el.classList.add('hide');});
+}
   initWelcome();
   loadAll();
 }
-function loadAll(){loadDash();loadLug();loadComp();loadWup();loadLF();loadStore();loadHandovers();loadNotifs();loadTimetable();initNpDate();if(CR==='admin'||CR==='hod')loadUsers();}
+function loadAll(){
+  loadDash();
+  if(!isGR()){loadLug();loadWup();loadStore();loadHandovers();}
+  loadComp();loadLF();loadNotifs();loadTimetable();initNpDate();
+  if(CR==='admin'||CR==='hod')loadUsers();
+}
 
 // ── WELCOME ──
 function getCurrentShift(){
@@ -126,7 +140,7 @@ function initWelcome(){
   document.getElementById('w-date').textContent=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   var lbl=document.getElementById('shift-lbl');
   if(lbl)lbl.textContent='Now: '+shift.label+' → Handing over to: '+shift.next;
-  if(CR==='gm'){var wp=document.getElementById('write-ho-panel');if(wp)wp.style.display='none';}
+if(CR==='gm'||isGR()){var wp=document.getElementById('write-ho-panel');if(wp)wp.style.display='none';}
   function tick(){document.getElementById('w-clock').textContent=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
   tick();setInterval(tick,1000);
 }
@@ -136,20 +150,23 @@ var pgTitles={dashboard:'Dashboard',luggage:'Luggage Storage',complaints:'Guest 
 var pgActions={luggage:['+ Log New Bag','m-lug'],complaints:['+ Log Complaint','m-comp'],wakeup:['+ Schedule Call','m-wup'],lostfound:['+ Log Item','m-lf'],store:['+ Add Item','m-store'],users:['+ Add Staff','m-user']};
 
 function pg(id,btn){
+  if(grBlocked(id)){toast('Access restricted for your role','error');return;}
   document.querySelectorAll('.ps').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('active');});
   document.getElementById('page-'+id).classList.add('active');
   if(btn)btn.classList.add('active');
   document.getElementById('pg-title').textContent=pgTitles[id]||id;
   var ab=document.getElementById('topbar-action');
-  if(pgActions[id]&&CR!=='gm'){ab.classList.remove('hide');ab.textContent=pgActions[id][0];ab.onclick=function(){openM(pgActions[id][1]);};}
+  var grActionAllowed=(id==='complaints'||id==='lostfound');
+  if(pgActions[id]&&CR!=='gm'&&(!isGR()||grActionAllowed)){ab.classList.remove('hide');ab.textContent=pgActions[id][0];ab.onclick=function(){openM(pgActions[id][1]);};
   else ab.classList.add('hide');
   document.getElementById('notif-panel').classList.remove('open');
   closeSidebar();
   if(id==='analytics')loadAnalytics();
   if(id==='newspapers')loadNpDay();
 }
-function pgFromDash(id){
+function pg(id,btn){
+  if(grBlocked(id)){toast('Access restricted for your role','error');return;}
   document.querySelectorAll('.ps').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('active');});
   document.getElementById('page-'+id).classList.add('active');
@@ -158,7 +175,8 @@ function pgFromDash(id){
     if(n.getAttribute('onclick')&&n.getAttribute('onclick').indexOf("'"+id+"'")>-1)n.classList.add('active');
   });
   var ab=document.getElementById('topbar-action');
-  if(pgActions[id]&&CR!=='gm'){ab.classList.remove('hide');ab.textContent=pgActions[id][0];ab.onclick=function(){openM(pgActions[id][1]);};}
+  var grActionAllowed=(id==='complaints'||id==='lostfound');
+  if(pgActions[id]&&CR!=='gm'&&(!isGR()||grActionAllowed)){ab.classList.remove('hide');ab.textContent=pgActions[id][0];ab.onclick=function(){openM(pgActions[id][1]);};
   else ab.classList.add('hide');
   closeSidebar();
 }
@@ -457,7 +475,7 @@ function renderComp(rows){
     +'<td>'+r.logged_by+'</td><td style="font-size:12px;white-space:nowrap;">'+fd(r.created_at)+'</td>'
     +'<td><span class="badge '+(r.status==='open'?'br2':'bg')+'">'+r.status+'</span></td>'
     +'<td style="font-size:11px;color:var(--ink3);max-width:150px;">'+(r.resolution_notes||'—')+'</td>'
-    +'<td style="white-space:nowrap;">'+(r.status==='open'&&CR!=='gm'?'<button class="btn btn-outline btn-xs" onclick="openResolve(\''+r.id+'\')">Resolve</button> ':'')+( canDel?'<button class="btn btn-danger btn-xs" onclick="askDel(\'complaints\',\''+r.id+'\',\'Complaint from '+r.guest_name+'\')">Del</button>':'')+'</td></tr>';
+    +'<td style="white-space:nowrap;">'+(r.status==='open'&&CR!=='gm'&&!isGR()?'<button class="btn btn-outline btn-xs" onclick="openResolve(\''+r.id+'\')">Resolve</button> ':'')+( canDel?'<button class="btn btn-danger btn-xs" onclick="askDel(\'complaints\',\''+r.id+'\',\'Complaint from '+r.guest_name+'\')">Del</button>':'')+'</td></tr>';
   }).join('');
 }
 function filtComp(v){renderComp(v==='all'?allComp:allComp.filter(function(r){return r.status===v;}));}
@@ -759,7 +777,8 @@ async function loadUsers(){
   var r=await db.from('users').select('*').order('created_at',{ascending:true});
   var list=document.getElementById('users-list');
   if(!r.data||!r.data.length){list.innerHTML='<div class="es"><div class="ei">◫</div><p>No users yet</p></div>';return;}
-  var rc={concierge:'bg',hod:'bo',gm:'bb',admin:'bp'};
+  var rc={concierge:'bg',hod:'bo',gm:'bb',admin:'bp',gr:'bp'};
+var roleLabel={concierge:'Concierge',hod:'HOD',gm:'General Manager',admin:'Administrator',gr:'Guest Relations'};
   list.innerHTML=r.data.map(function(u){return '<div class="uc"><div style="width:38px;height:38px;border-radius:10px;background:var(--sage);border:1px solid var(--sageborder);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:var(--ink2);flex-shrink:0;">'+u.full_name.charAt(0)+'</div><div style="flex:1;"><div style="font-size:13px;font-weight:600;">'+u.full_name+'</div><div style="font-size:11px;color:var(--ink3);">'+u.email+'</div></div><span class="badge '+(rc[u.role]||'bgr')+'">'+u.role+'</span>'+(u.id!==CU.id?'<button class="btn btn-danger btn-sm" onclick="delUser(\''+u.id+'\',\''+u.full_name+'\')">Remove</button>':'<span style="font-size:11px;color:var(--ink3);">You</span>')+'</div>';}).join('');
 }
 async function addUser(){
